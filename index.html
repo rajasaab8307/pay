@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flowpay Web – Pay without internet</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f5f7fa;--card:#fff;--tx:#14213d;--mu:#667085;--pr:#0a7a5a;--pr2:#e3f5ee;--bd:#e4e7ec;--er:#c0392b;--wa:#fff4d6}
+html{scroll-padding-top:env(safe-area-inset-top,0px);color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1116;--card:#171b22;--tx:#eef1f6;--mu:#98a2b3;--pr:#34d399;--pr2:#12332a;--bd:#272d38;--er:#f08a7e;--wa:#3a3216}}
+:root[data-theme="dark"]{--bg:#0e1116;--card:#171b22;--tx:#eef1f6;--mu:#98a2b3;--pr:#34d399;--pr2:#12332a;--bd:#272d38;--er:#f08a7e;--wa:#3a3216}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:480px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0}h2{font-size:16px;margin:18px 0 8px}
+.sub{color:var(--mu);font-size:14px;margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:16px;margin-bottom:12px}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.tab{padding:12px;border-radius:12px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font-weight:600;font-size:15px}
+.tab.on{background:var(--pr);color:#fff;border-color:var(--pr)}
+@media (prefers-color-scheme:dark){.tab.on{color:#06251b}}
+label{display:block;font-size:13px;color:var(--mu);margin:10px 0 4px}
+input,textarea{width:100%;padding:12px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font:inherit}
+textarea{min-height:90px;resize:vertical}
+.btn{display:block;width:100%;padding:14px;border:0;border-radius:12px;background:var(--pr);color:#fff;font-weight:700;font-size:16px;margin-top:12px;cursor:pointer;text-align:center;text-decoration:none}
+@media (prefers-color-scheme:dark){.btn{color:#06251b}}
+.btn.alt{background:var(--pr2);color:var(--pr)}
+.btn:disabled{opacity:.5}
+video{width:100%;border-radius:12px;background:#000;aspect-ratio:1/1;object-fit:cover}
+.note{background:var(--wa);border-radius:10px;padding:10px 12px;font-size:13px;margin-top:10px}
+.err{color:var(--er);font-size:13px;min-height:18px;margin-top:6px}
+.row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd);font-size:14px}
+.row:last-child{border:0}.mu{color:var(--mu)}
+.ok{color:var(--pr);font-weight:700}.bad{color:var(--er);font-weight:700}
+.sheet{position:fixed;inset:auto 0 0 0;background:var(--card);border-top:1px solid var(--bd);border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px));box-shadow:0 -8px 30px #0004;max-width:480px;margin:0 auto;z-index:5}
+.sheet[hidden]{display:none}
+.timer{font-size:34px;font-weight:800;color:var(--pr)}
+ol{padding-left:20px;margin:8px 0;font-size:14px}
+.hidden{display:none}
+details{margin-top:8px}summary{cursor:pointer;color:var(--mu);font-size:14px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Flowpay Web</h1>
+  <p class="sub">UPI without internet via <b>*99#</b> USSD and <b>123Pay</b> IVR. Your phone’s dialer does the payment; this page just prepares it.</p>
+
+  <div class="tabs">
+    <button class="tab on" data-t="scan">Scan QR</button>
+    <button class="tab" data-t="contact">Pay Contact</button>
+  </div>
+
+  <section id="scan" class="card">
+    <video id="vid" playsinline muted class="hidden"></video>
+    <button class="btn" id="camBtn">Open camera</button>
+    <button class="btn alt" id="fileBtn">Scan from image</button>
+    <input type="file" id="file" accept="image/*" class="hidden">
+    <label for="upiTxt">Or paste a UPI link / QR text</label>
+    <input id="upiTxt" placeholder="upi://pay?pa=name@bank&amp;pn=Shop&amp;am=100">
+    <div class="err" id="scanErr"></div>
+    <div id="payee" class="hidden">
+      <h2>Payee</h2>
+      <div class="row"><span class="mu">Name</span><b id="pn"></b></div>
+      <div class="row"><span class="mu">UPI ID</span><b id="pa"></b></div>
+      <div class="row"><span class="mu">Amount</span><b id="am"></b></div>
+      <button class="btn" id="ussdBtn">Dial *99# scan-to-pay</button>
+      <div class="note">USSD doesn’t work on Jio. Jio users should use the Pay Contact tab (123Pay).</div>
+    </div>
+  </section>
+
+  <section id="contact" class="card hidden">
+    <label for="mob">Payee mobile number (10 digits)</label>
+    <input id="mob" inputmode="numeric" maxlength="10" placeholder="9876543210">
+    <label for="amt">Amount (₹)</label>
+    <input id="amt" inputmode="decimal" placeholder="100">
+    <div class="err" id="cErr"></div>
+    <button class="btn" id="ivrBtn">Place 123Pay call</button>
+    <div class="note">Make sure your bank account is set up for 123Pay. Enter your UPI PIN only on the bank’s call, never on this page.</div>
+  </section>
+
+  <h2>After the call</h2>
+  <div class="card">
+    <label for="sms">Paste the bank’s confirmation SMS</label>
+    <textarea id="sms" placeholder="Rs.100.00 debited from A/c XX1234 … UPI Ref 412345678901"></textarea>
+    <button class="btn alt" id="saveBtn">Parse &amp; save outcome</button>
+    <div class="err" id="smsErr"></div>
+  </div>
+
+  <h2>History</h2>
+  <div class="card" id="hist"></div>
+
+  <details class="card">
+    <summary>Settings (verify before relying on these)</summary>
+    <label for="cUssd">USSD scan-to-pay code</label><input id="cUssd">
+    <label for="cIvr">123Pay IVR number</label><input id="cIvr">
+    <label for="cDtmf">DTMF template ( , = pause )</label><input id="cDtmf">
+    <label for="cMax">Max amount per payment (₹)</label><input id="cMax" inputmode="numeric">
+    <button class="btn alt" id="cSave">Save settings</button>
+    <button class="btn alt" id="cClear">Clear history</button>
+  </details>
+</main>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="mu" style="font-size:13px">On-call guide</div>
+  <div class="timer" id="timer">40</div>
+  <ol>
+    <li>Wait for the call or menu to connect.</li>
+    <li>Follow the prompts and confirm the payee and amount.</li>
+    <li>Enter your UPI PIN only when the bank asks.</li>
+    <li>When it ends, paste the bank SMS below the page.</li>
+  </ol>
+  <button class="btn alt" id="closeSheet">Done</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const DEF={ussd:"*99*1*3#",ivr:"08045163666",dtmf:",,,1,,{mobile}#,{amount}#",max:5000};
+const store={
+  get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+let cfg=Object.assign({},DEF,store.get("fp_cfg",{}));
+let hist=store.get("fp_hist",[]);
+let cur=null,stream=null,raf=0,tId=0;
+
+const inr=n=>"₹"+Number(n).toLocaleString("en-IN",{maximumFractionDigits:2});
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const telHref=(num,extra)=>"tel:"+num+(extra||"").replace(/#/g,"%23").replace(/\*/g,"%2A");
+
+// Tabs
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===b));
+  $("#scan").classList.toggle("hidden",b.dataset.t!=="scan");
+  $("#contact").classList.toggle("hidden",b.dataset.t!=="contact");
+  if(b.dataset.t!=="scan")stopCam();
+});
+
+// UPI parsing
+function parseUPI(t){
+  t=(t||"").trim();
+  if(!/^upi:/i.test(t))return null;
+  try{
+    const u=new URL(t),p=u.searchParams,pa=p.get("pa");
+    if(!pa||!/^[\w.\-]{2,}@[\w.\-]{2,}$/.test(pa))return null;
+    return{pa,pn:p.get("pn")||"Unknown",am:p.get("am")||""};
+  }catch(e){return null}
+}
+function showPayee(t){
+  const r=parseUPI(t);
+  if(!r){$("#scanErr").textContent="That doesn’t look like a UPI QR.";return false}
+  $("#scanErr").textContent="";cur=r;
+  $("#pn").textContent=r.pn;$("#pa").textContent=r.pa;
+  $("#am").textContent=r.am?inr(r.am):"Enter in the USSD menu";
+  $("#payee").classList.remove("hidden");
+  return true;
+}
+$("#upiTxt").addEventListener("input",e=>{if(e.target.value.length>12)showPayee(e.target.value)});
+
+// Camera scan
+const det=("BarcodeDetector" in window)?new BarcodeDetector({formats:["qr_code"]}):null;
+async function decodeSource(src,w,h){
+  if(det){try{const r=await det.detect(src);if(r[0])return r[0].rawValue}catch(e){}}
+  if(window.jsQR){
+    const c=document.createElement("canvas");c.width=w;c.height=h;
+    const x=c.getContext("2d",{willReadFrequently:true});x.drawImage(src,0,0,w,h);
+    const d=x.getImageData(0,0,w,h),q=jsQR(d.data,w,h);
+    if(q)return q.data;
+  }
+  return null;
+}
+function stopCam(){
+  cancelAnimationFrame(raf);
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+  $("#vid").classList.add("hidden");$("#camBtn").textContent="Open camera";
+}
+$("#camBtn").onclick=async()=>{
+  if(stream){stopCam();return}
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+    const v=$("#vid");v.srcObject=stream;await v.play();
+    v.classList.remove("hidden");$("#camBtn").textContent="Stop camera";
+    const tick=async()=>{
+      if(!stream)return;
+      if(v.videoWidth){
+        const t=await decodeSource(v,v.videoWidth,v.videoHeight);
+        if(t&&showPayee(t)){stopCam();return}
+      }
+      raf=requestAnimationFrame(tick);
+    };tick();
+  }catch(e){$("#scanErr").textContent="Camera unavailable. Try “Scan from image” or paste the link."}
+};
+$("#fileBtn").onclick=()=>$("#file").click();
+$("#file").onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  const img=new Image();img.src=URL.createObjectURL(f);
+  await img.decode().catch(()=>{});
+  const t=await decodeSource(img,img.naturalWidth,img.naturalHeight);
+  if(!t)$("#scanErr").textContent="No QR found in that image.";else showPayee(t);
+  e.target.value="";
+};
+
+// Dialing
+function openSheet(){
+  $("#sheet").hidden=false;let s=40;$("#timer").textContent=s;
+  clearInterval(tId);
+  tId=setInterval(()=>{s--;$("#timer").textContent=Math.max(s,0);if(s<=0)clearInterval(tId)},1000);
+}
+$("#closeSheet").onclick=()=>{$("#sheet").hidden=true;clearInterval(tId)};
+$("#ussdBtn").onclick=()=>{
+  if(!cur)return;
+  stash({type:"QR / USSD",payee:cur.pn+" ("+cur.pa+")",amount:cur.am,status:"pending"});
+  location.href=telHref(cfg.ussd.startsWith("*")?cfg.ussd:"*99#");
+  openSheet();
+};
+$("#ivrBtn").onclick=()=>{
+  const m=$("#mob").value.trim(),a=parseFloat($("#amt").value);
+  const e=$("#cErr");e.textContent="";
+  if(!/^[6-9]\d{9}$/.test(m)){e.textContent="Enter a valid 10-digit Indian mobile number.";return}
+  if(!(a>=1)||a>cfg.max){e.textContent="Amount must be between ₹1 and "+inr(cfg.max)+".";return}
+  const dt=cfg.dtmf.replace("{mobile}",m).replace("{amount}",String(Math.round(a)));
+  stash({type:"Contact / 123Pay",payee:m,amount:a,status:"pending"});
+  location.href=telHref(cfg.ivr,dt);
+  openSheet();
+};
+
+// History + SMS parsing
+function stash(o){o.id=Date.now();o.at=new Date().toISOString();hist.unshift(o);hist=hist.slice(0,50);store.set("fp_hist",hist);render()}
+function parseSMS(t){
+  const am=t.match(/(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d+)?)/i);
+  const ref=t.match(/(?:upi\s*ref(?:erence)?(?:\s*no)?|ref(?:erence)?(?:\s*no)?|rrn|utr)[\s:.#-]*([0-9]{9,14})/i);
+  const bad=/fail|declin|unsuccessful|reversed|insufficient|not\s+processed/i.test(t);
+  const good=/debited|paid|sent|success|credited/i.test(t);
+  if(!am&&!ref)return null;
+  return{amount:am?parseFloat(am[1].replace(/,/g,"")):null,ref:ref?ref[1]:"",status:bad?"failed":good?"success":"unknown"};
+}
+$("#saveBtn").onclick=()=>{
+  const r=parseSMS($("#sms").value);
+  if(!r){$("#smsErr").textContent="Couldn’t find an amount or reference in that text.";return}
+  $("#smsErr").textContent="";
+  const p=hist.find(h=>h.status==="pending"&&(r.amount==null||Number(h.amount)===r.amount||!h.amount));
+  if(p){p.status=r.status;p.ref=r.ref;if(!p.amount&&r.amount)p.amount=r.amount;store.set("fp_hist",hist);render()}
+  else stash({type:"SMS only",payee:"—",amount:r.amount,status:r.status,ref:r.ref});
+  $("#sms").value="";
+};
+function render(){
+  $("#hist").innerHTML=hist.length?hist.map(h=>{
+    const c=h.status==="success"?"ok":h.status==="failed"?"bad":"mu";
+    return `<div class="row"><div><b>${esc(h.type)}</b><br><span class="mu">${esc(h.payee)}${h.ref?" · Ref "+esc(h.ref):""}</span></div>
+      <div style="text-align:right"><b>${h.amount?inr(h.amount):"—"}</b><br><span class="${c}">${esc(h.status)}</span></div></div>`}).join("")
+    :'<span class="mu">No payments yet.</span>';
+}
+
+// Settings
+function fillCfg(){$("#cUssd").value=cfg.ussd;$("#cIvr").value=cfg.ivr;$("#cDtmf").value=cfg.dtmf;$("#cMax").value=cfg.max}
+$("#cSave").onclick=()=>{
+  cfg={ussd:$("#cUssd").value.trim()||DEF.ussd,ivr:$("#cIvr").value.trim()||DEF.ivr,dtmf:$("#cDtmf").value.trim()||DEF.dtmf,max:Number($("#cMax").value)||DEF.max};
+  store.set("fp_cfg",cfg);
+};
+$("#cClear").onclick=()=>{hist=[];store.set("fp_hist",hist);render()};
+fillCfg();render();
+})();
+</script>
+</body>
+</html>
